@@ -2,6 +2,38 @@
 # k0s-lab.sh: Setup or reset k0s lab environment
 set -e
 
+function check_requirements() {
+  # Tools used by the user directly vs. only through sudo (may live in /usr/sbin, outside the user's PATH)
+  local user_cmds=(sudo curl jq awk sed grep chmod mv mkdir rm)
+  local sudo_cmds=(systemctl iptables mount)
+  local missing=()
+  if [ "$(uname -s)" != "Linux" ] || [ "$(uname -m)" != "x86_64" ]; then
+    echo "ERROR: this script supports only Linux x86_64 (kubectl download is amd64)."
+    exit 1
+  fi
+  for cmd in "${user_cmds[@]}"; do
+    command -v "$cmd" &> /dev/null || missing+=("$cmd")
+  done
+  if [[ " ${missing[*]} " == *" sudo "* ]]; then
+    echo "ERROR: sudo is required but not installed."
+    exit 1
+  fi
+  if ! sudo -n true 2>/dev/null && ! sudo -v; then
+    echo "ERROR: sudo privileges are required."
+    exit 1
+  fi
+  for cmd in "${sudo_cmds[@]}"; do
+    sudo sh -c "command -v $cmd" &> /dev/null || missing+=("$cmd")
+  done
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo "ERROR: missing required tools: ${missing[*]}"
+    echo "Install them (e.g. 'sudo apt install ${missing[*]}') and retry."
+    exit 1
+  fi
+}
+
+check_requirements
+
 function stop_docker() {
   echo "Stopping Docker..."
   sudo systemctl stop docker.socket || true
